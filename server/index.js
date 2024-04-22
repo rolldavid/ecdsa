@@ -1,15 +1,18 @@
 const express = require("express");
 const app = express();
 const cors = require("cors");
+const { secp256k1 } = require("ethereum-cryptography/secp256k1");
+const { keccak256 } = require("ethereum-cryptography/keccak")
+const { toHex } = require("ethereum-cryptography/utils");
 const port = 3042;
 
 app.use(cors());
 app.use(express.json());
 
 const balances = {
-  "0x1": 100,
-  "0x2": 50,
-  "0x3": 75,
+  "c5c4cfaa093ac8c0fc53cd561bd36ce52b9ee5d6": 100,
+  "2f3fc69ca52f09a3aad7e768cc2fe3dc6ebd854e": 50,
+  "fd99f4f4d407320a399aa1d5bb985684337da25d": 75,
 };
 
 app.get("/balance/:address", (req, res) => {
@@ -19,7 +22,16 @@ app.get("/balance/:address", (req, res) => {
 });
 
 app.post("/send", (req, res) => {
-  const { sender, recipient, amount } = req.body;
+ 
+  const { signature, message, bit, sender, recipient, amount } = req.body
+
+  let sig = secp256k1.Signature.fromCompact(signature)
+  sig = sig.addRecoveryBit(bit)
+  const publicKey = toHex(keccak256(sig.recoverPublicKey(message).toRawBytes()).slice(-20))
+
+  if (publicKey !== sender) {
+    res.status(401).send({ message: "Not your account" });
+  }
 
   setInitialBalance(sender);
   setInitialBalance(recipient);
@@ -31,6 +43,9 @@ app.post("/send", (req, res) => {
     balances[recipient] += amount;
     res.send({ balance: balances[sender] });
   }
+
+  res.send({status: "ok"})
+
 });
 
 app.listen(port, () => {
